@@ -9,15 +9,16 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
+	"github.com/rs/cors"
 
-	"goAPI/internal"
+	router "goAPI/internal"
 	"goAPI/internal/models"
 	"goAPI/pkg"
 )
 
 type App struct {
-    Router *mux.Router
-    Db     *gorm.DB
+	Router *mux.Router
+	Db     *gorm.DB
 }
 
 func (a *App) Initialize() {
@@ -54,17 +55,16 @@ func (a *App) Initialize() {
 	fmt.Println("\nConnection Established")
 
 	a.initTables(uuid.New().String())
-	
+
 	// Migrate the schema
 	a.Db.AutoMigrate(&models.Person{}, &models.Book{})
-	
+
 	// API routes
 	a.Router = mux.NewRouter()
 	router.AddRoutes(a.Router, a.Db)
 }
 
-const tablePeopleCreationQuery = 
-`	
+const tablePeopleCreationQuery = `	
 	CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 	CREATE TABLE IF NOT EXISTS people (
@@ -74,8 +74,7 @@ const tablePeopleCreationQuery =
 	);
 `
 
-const tableBooksCreationQuery =
-`
+const tableBooksCreationQuery = `
 	CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 	CREATE TABLE IF NOT EXISTS books (
@@ -100,6 +99,16 @@ func (a *App) Execute() {
 	a.Initialize()
 	defer a.Db.Close()
 
+	//init cors
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "PUT", "DELETE"},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: true,
+	})
+
+	handler := c.Handler(a.Router)
+
 	// Run server
-	http.ListenAndServe(":8080", a.Router)
+	http.ListenAndServe(":8080", handler)
 }
