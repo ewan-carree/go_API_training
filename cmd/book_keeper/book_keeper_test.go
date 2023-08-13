@@ -1,10 +1,9 @@
-package main_test
+package main
 
 import (
 	"bytes"
 	"encoding/json"
-	"goAPI/cmd/book_keeper"
-	"goAPI/internal/models"
+	"book_keeper/internal/models"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +14,7 @@ import (
 
 var randomUUID = uuid.New()
 
-var a book_keeper.App
+var a App
 
 func TestMain(m *testing.M) {
 	a.Initialize()

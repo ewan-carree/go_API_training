@@ -8,7 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/gorm"
 
-	"goAPI/internal/models"
+	"book_keeper/internal/models"
 )
 
 

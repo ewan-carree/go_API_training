@@ -1,19 +1,19 @@
-package book_keeper
+package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
+	"os"
+	"os/exec"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/rs/cors"
 
-	router "goAPI/internal"
-	"goAPI/internal/models"
-	"goAPI/pkg"
+	router "book_keeper/internal"
+	"book_keeper/internal/models"
+
+	_ "github.com/lib/pq"
 )
 
 type App struct {
@@ -22,84 +22,39 @@ type App struct {
 }
 
 func (a *App) Initialize() {
-	// load env variables
-	dialect, host, port, user, password, dbname := pkg.GetEnvVariables()
-
-	// db connection string
-	dbURI := fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=disable", host, port, user, password)
-
-	// open connection to default database template1
-	db, err := gorm.Open(dialect, dbURI+" dbname=template1")
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer db.Close()
-
-	// create database if it doesn't exist
-	err = db.Exec(fmt.Sprintf("CREATE DATABASE %s", dbname)).Error
-	if err != nil {
-		// assume error is related to existing database, ignore and proceed
-		fmt.Printf("Skipping creating database %s, assuming it already exists", dbname)
-	} else {
-		fmt.Printf("Database %s created successfully\n", dbname)
+	// Wait for the PostgreSQL container to be ready
+	cmd := exec.Command("/app/wait-for-it.sh", "postgres:5432", "--timeout=30", "--")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		panic("Failed to wait for PostgreSQL to be ready: " + err.Error())
 	}
 
-	// update dbURI to use the created database
-	dbURI += " dbname=" + dbname
+	// Construct database connection string
+	dbURI := "host=postgres port=5432 user=root password=test dbname=book_keeper sslmode=disable"
 
-	// connect to the created database
-	a.Db, err = gorm.Open(dialect, dbURI)
+	// Connect to the database
+	db, err := gorm.Open("postgres", dbURI)
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
-	fmt.Println("\nConnection Established")
-
-	a.initTables(uuid.New().String())
+	a.Db = db
+	fmt.Println("Connection Established")
 
 	// Migrate the schema
 	a.Db.AutoMigrate(&models.Person{}, &models.Book{})
 
-	// API routes
+	// Initialize the router
 	a.Router = mux.NewRouter()
 	router.AddRoutes(a.Router, a.Db)
 }
 
-const tablePeopleCreationQuery = `	
-	CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-	CREATE TABLE IF NOT EXISTS people (
-		id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-		name VARCHAR(100),
-		email VARCHAR(100)
-	);
-`
-
-const tableBooksCreationQuery = `
-	CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-	CREATE TABLE IF NOT EXISTS books (
-		id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-		title VARCHAR(100),
-		author VARCHAR(100),
-		person_id UUID
-	);
-`
-
-func (a *App) initTables(name string) {
-	if value := a.Db.Exec(tablePeopleCreationQuery); value.Error != nil {
-		log.Fatal(value.Error)
-	}
-	if value := a.Db.Exec(tableBooksCreationQuery); value.Error != nil {
-		log.Fatal(value.Error)
-	}
-}
-
 func (a *App) Execute() {
-	// open connection to db
+	// Initialize connection to db and router
 	a.Initialize()
 	defer a.Db.Close()
 
-	//init cors
+	// Init cors
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "PUT", "DELETE"},
@@ -111,4 +66,9 @@ func (a *App) Execute() {
 
 	// Run server
 	http.ListenAndServe(":8080", handler)
+}
+
+func main() {
+	a := App{}
+	a.Execute()
 }

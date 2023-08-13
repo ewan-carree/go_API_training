@@ -1,0 +1,21 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: book_keeper
+      POSTGRES_HOST_AUTH_METHOD: trust  # Add this line to allow all connections without a password
+    volumes:
+      - ./people.sql:/docker-entrypoint-initdb.d/people.sql
+      - ./books.sql:/docker-entrypoint-initdb.d/books.sql
+
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
